@@ -34,7 +34,7 @@ export const BottomTabNavigator = () => {
                     backgroundColor: colors.surface,
                     borderTopColor: colors.border,
                     borderTopWidth: 1,
-                    height: 66,
+                    height: 60,
                     paddingBottom: 8,
                     paddingTop: 8,
                     // Shadow for depth
@@ -61,6 +61,7 @@ export const BottomTabNavigator = () => {
 
                     return <Ionicons name={iconName} size={size - 4} color={color} />;
                 },
+                tabBarShowLabel: false,
             })}
         >
             <Tab.Screen

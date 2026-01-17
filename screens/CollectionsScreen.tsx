@@ -154,7 +154,7 @@ export const CollectionsScreen = () => {
         >
             <View style={styles.cardLeft}>
                 <View style={styles.iconContainer}>
-                    <Ionicons name="folder" size={24} color={colors.accent} />
+                    <Ionicons name="folder-open-outline" size={24} color={colors.accent} />
                 </View>
                 <View style={styles.cardContent}>
                     <Text style={styles.collectionName} numberOfLines={1}>{item.name}</Text>
