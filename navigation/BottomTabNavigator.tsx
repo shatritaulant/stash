@@ -67,7 +67,7 @@ export const BottomTabNavigator = () => {
             <Tab.Screen
                 name="Links"
                 component={LibraryScreen}
-                options={{ title: 'Stash' }}
+                options={{ title: 'Keep' }}
             />
             <Tab.Screen
                 name="Collections"

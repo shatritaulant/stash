@@ -6,6 +6,7 @@ import { RootStackParamList } from '../types/navigation';
 import { createCollection, getCollections, deleteCollection, updateCollectionName } from '../db';
 import { Ionicons } from '@expo/vector-icons';
 import { SearchBar } from '../components/SearchBar';
+import { HighlightedText } from '../components/HighlightedText';
 
 import { useTheme } from '../context/ThemeContext';
 import { ThemeColors } from '../constants/theme';
@@ -157,7 +158,12 @@ export const CollectionsScreen = () => {
                     <Ionicons name="folder-open-outline" size={24} color={colors.accent} />
                 </View>
                 <View style={styles.cardContent}>
-                    <Text style={styles.collectionName} numberOfLines={1}>{item.name}</Text>
+                    <HighlightedText
+                        text={item.name}
+                        searchQuery={search}
+                        style={styles.collectionName}
+                        numberOfLines={1}
+                    />
                     <Text style={styles.itemCount}>{item.count} items</Text>
                 </View>
             </View>

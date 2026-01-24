@@ -49,7 +49,7 @@ export const AccountScreen = () => {
             </View>
 
             <View style={styles.footer}>
-                <Text style={styles.versionText}>v1.0.0 (Building Stash)</Text>
+                <Text style={styles.versionText}>v1.0.0 (Keep)</Text>
             </View>
         </ScrollView>
     );

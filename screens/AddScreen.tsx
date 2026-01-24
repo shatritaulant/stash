@@ -27,6 +27,8 @@ import { Image } from 'react-native';
 import { useTheme } from '../context/ThemeContext';
 import { ThemeColors } from '../constants/theme';
 import { decodeHtmlEntities } from '../utils/text';
+import { detectPlatform } from '../services/platform';
+import { TagInput } from '../components/TagInput';
 
 type AddScreenNavigationProp = StackNavigationProp<RootStackParamList, 'Add'>;
 type AddScreenRouteProp = RouteProp<RootStackParamList, 'Add'>;
@@ -39,7 +41,6 @@ export const AddScreen = () => {
     const [url, setUrl] = useState('');
     const [note, setNote] = useState('');
     const [tags, setTags] = useState<string[]>([]);
-    const [tagInput, setTagInput] = useState('');
     const [loading, setLoading] = useState(false);
     const [analyzing, setAnalyzing] = useState(false);
     const [previewMeta, setPreviewMeta] = useState<any>(null);
@@ -52,11 +53,8 @@ export const AddScreen = () => {
     const [showCollectionModal, setShowCollectionModal] = useState(false);
     const collectionModalAnim = useRef(new Animated.Value(Dimensions.get('window').height)).current;
 
-    // Suggestions
-    const [showSuggestions, setShowSuggestions] = useState(false);
-    const [filteredSuggestions, setFilteredSuggestions] = useState<string[]>([]);
+    // Categories for suggestions
     const [allCategories, setAllCategories] = useState<string[]>([]);
-    const suggestionHeight = useRef(new Animated.Value(0)).current;
 
     useEffect(() => {
         // Load categories and collections
@@ -76,6 +74,19 @@ export const AddScreen = () => {
     useEffect(() => {
         if (route.params?.url) {
             setUrl(route.params.url);
+        } else {
+            // Smart Paste Logic
+            const checkClipboard = async () => {
+                const text = await Clipboard.getStringAsync();
+                if (text) {
+                    const trimmed = text.trim();
+                    const isUrl = /^(https?:\/\/)?[\w.-]+\.[a-z]{2,}/i.test(trimmed);
+                    if (isUrl) {
+                        setUrl(trimmed);
+                    }
+                }
+            };
+            checkClipboard();
         }
     }, [route.params?.url]);
 
@@ -123,70 +134,6 @@ export const AddScreen = () => {
         setTags([]);
     };
 
-    const handleTagInputSubmit = () => {
-        const trimmed = tagInput.trim();
-        if (trimmed.length > 0) {
-            // Check if tag contains comma, split it
-            if (trimmed.includes(',')) {
-                const newTags = trimmed.split(',').map(t => t.trim()).filter(Boolean);
-                setTags([...tags, ...newTags]);
-            } else {
-                setTags([...tags, trimmed]);
-            }
-            setTagInput('');
-        }
-    };
-
-    const handleTagInputChange = (text: string) => {
-        if (text.endsWith(',')) {
-            // Auto-add tag when comma is typed
-            const newTag = text.slice(0, -1).trim();
-            if (newTag) {
-                setTags([...tags, newTag]);
-                setTagInput('');
-            }
-        } else {
-            setTagInput(text);
-
-            // Filter suggestions based on current input
-            if (text.length > 0) {
-                const filtered = allCategories.filter(c =>
-                    c.toLowerCase().includes(text.toLowerCase()) &&
-                    !tags.includes(c)
-                );
-                setFilteredSuggestions(filtered);
-                setShowSuggestions(filtered.length > 0);
-            } else {
-                setFilteredSuggestions(allCategories.filter(c => !tags.includes(c)));
-                setShowSuggestions(true);
-            }
-        }
-    };
-
-    const handleTagBackspace = ({ nativeEvent }: any) => {
-        if (nativeEvent.key === 'Backspace' && tagInput === '' && tags.length > 0) {
-            setTags(tags.slice(0, -1));
-        }
-    };
-
-    const removeTag = (indexToRemove: number) => {
-        setTags(tags.filter((_, index) => index !== indexToRemove));
-    };
-
-    const handleSuggestionPress = (suggestion: string) => {
-        setTags([...tags, suggestion]);
-        setTagInput('');
-        setFilteredSuggestions(allCategories.filter(c => !tags.includes(c) && c !== suggestion));
-    };
-
-    useEffect(() => {
-        Animated.timing(suggestionHeight, {
-            toValue: showSuggestions ? (Math.min(filteredSuggestions.length * 40, 160)) : 0,
-            duration: 200,
-            useNativeDriver: false,
-        }).start();
-    }, [showSuggestions, filteredSuggestions]);
-
     const toggleCollectionModal = () => {
         if (showCollectionModal) {
             Animated.timing(collectionModalAnim, {
@@ -232,12 +179,15 @@ export const AddScreen = () => {
             const cleanTags = tags.map(t => t.trim()).filter(Boolean);
             const categoryJson = JSON.stringify(cleanTags);
 
+            const detectedPlatform = detectPlatform(url);
+            console.log(`[AddScreen] Detected platform: ${detectedPlatform} for URL: ${url}`);
+
             const saveId = await addSave({
                 url,
                 title: meta?.title || url,
                 imageUrl: meta?.imageUrl,
                 siteName: meta?.siteName,
-                platform: 'web',
+                platform: detectedPlatform,
                 category: categoryJson,
                 note,
             });
@@ -265,7 +215,7 @@ export const AddScreen = () => {
     };
 
     return (
-        <TouchableWithoutFeedback onPress={() => { Keyboard.dismiss(); setShowSuggestions(false); }}>
+        <TouchableWithoutFeedback onPress={() => Keyboard.dismiss()}>
             <View style={styles.container}>
                 <View style={[styles.inputGroup, { marginBottom: 32 }]}>
                     {url ? (
@@ -347,53 +297,15 @@ export const AddScreen = () => {
 
                 <View style={[styles.inputGroup, { zIndex: 10 }]}>
                     <Text style={styles.label}>Tags</Text>
-                    <View style={styles.tagInputContainer}>
-                        {tags.map((tag, index) => (
-                            <TouchableOpacity key={index} style={styles.tagChip} onPress={() => removeTag(index)}>
-                                <Text style={styles.tagChipText}>{tag}</Text>
-                                <Ionicons name="close" size={14} color={colors.accentText} style={{ marginLeft: 4 }} />
-                            </TouchableOpacity>
-                        ))}
-                        <TextInput
-                            style={styles.tagInput}
-                            placeholder={tags.length === 0 ? "Add tags..." : ""}
-                            placeholderTextColor={colors.textMuted}
-                            value={tagInput}
-                            onChangeText={handleTagInputChange}
-                            onKeyPress={handleTagBackspace}
-                            onSubmitEditing={handleTagInputSubmit}
-                            onFocus={() => {
-                                setFilteredSuggestions(allCategories.filter(c => !tags.includes(c)));
-                                setShowSuggestions(true);
-                            }}
-                            autoCapitalize="words"
-                            blurOnSubmit={false}
-                        />
-
-                    </View>
-
-                    {/* Suggestions Dropdown */}
-                    <Animated.View style={[styles.suggestionsContainer, { height: suggestionHeight }]}>
-                        <ScrollView
-                            nestedScrollEnabled={true}
-                            keyboardShouldPersistTaps="handled"
-                            contentContainerStyle={{ flexGrow: 1 }}
-                        >
-                            {filteredSuggestions.map((item, index) => (
-                                <TouchableOpacity
-                                    key={index}
-                                    style={styles.suggestionItem}
-                                    onPress={() => handleSuggestionPress(item)}
-                                >
-                                    <Text style={styles.suggestionText}>{item}</Text>
-                                </TouchableOpacity>
-                            ))}
-                        </ScrollView>
-                    </Animated.View>
+                    <TagInput
+                        tags={tags}
+                        onTagsChange={setTags}
+                        availableSuggestions={allCategories}
+                    />
                 </View>
 
                 <View style={styles.inputGroup}>
-                    <Text style={styles.label}>Note (Optional)</Text>
+                    <Text style={styles.label}>Notes</Text>
                     <TextInput
                         style={[styles.input, styles.textArea]}
                         placeholder="Add a note..."
@@ -412,7 +324,7 @@ export const AddScreen = () => {
                     {loading ? (
                         <ActivityIndicator color={colors.accentText} />
                     ) : (
-                        <Text style={styles.saveButtonText}>Save Link</Text>
+                        <Text style={styles.saveButtonText}>Save</Text>
                     )}
                 </TouchableOpacity>
 
@@ -546,60 +458,6 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     textArea: {
         height: 100,
         textAlignVertical: 'top',
-    },
-    suggestionsContainer: {
-        position: 'absolute',
-        top: '100%',
-        zIndex: 100,
-        backgroundColor: colors.surface,
-        borderBottomLeftRadius: 12,
-        borderBottomRightRadius: 12,
-        width: '100%',
-        overflow: 'hidden',
-        borderWidth: 1,
-        borderColor: colors.border,
-    },
-    suggestionItem: {
-        padding: 12,
-        borderBottomWidth: 1,
-        borderBottomColor: colors.border,
-    },
-    suggestionText: {
-        color: colors.text,
-    },
-    tagInputContainer: {
-        flexDirection: 'row',
-        flexWrap: 'wrap',
-        alignItems: 'center',
-        backgroundColor: colors.surface,
-        borderRadius: 12,
-        padding: 12,
-        borderWidth: 1,
-        borderColor: colors.border,
-        minHeight: 56,
-        gap: 8,
-    },
-    tagInput: {
-        flex: 1,
-        minWidth: 100,
-        color: colors.text,
-        fontSize: 16,
-        paddingVertical: 4,
-        borderWidth: 0,
-        backgroundColor: 'transparent',
-    },
-    tagChip: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: colors.accent,
-        borderRadius: 16,
-        paddingHorizontal: 10,
-        paddingVertical: 6,
-    },
-    tagChipText: {
-        color: colors.accentText,
-        fontSize: 14,
-        fontWeight: '500',
     },
     collectionChip: {
         flexDirection: 'row',

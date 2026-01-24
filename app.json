@@ -1,9 +1,9 @@
 {
   "expo": {
-    "name": "stash",
-    "slug": "stash",
+    "name": "Keep",
+    "slug": "keep",
     "version": "1.0.0",
-    "scheme": "stash-app",
+    "scheme": "keep-app",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
@@ -16,7 +16,7 @@
     "ios": {
       "supportsTablet": true,
       "userInterfaceStyle": "dark",
-      "bundleIdentifier": "com.taulantshatri.stash"
+      "bundleIdentifier": "com.taulantshatri.keep"
     },
     "android": {
       "adaptiveIcon": {
@@ -30,7 +30,7 @@
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
-      "package": "com.taulantshatri.stash"
+      "package": "com.taulantshatri.keep"
     },
     "web": {
       "favicon": "./assets/favicon.png"

@@ -4,19 +4,23 @@ export const detectPlatform = (url: string): Platform => {
     try {
         const hostname = new URL(url).hostname.toLowerCase();
 
-        if (hostname.includes('youtube.com') || hostname.includes('youtu.be')) {
+        // YouTube variants: youtube.com, youtu.be, m.youtube.com, etc.
+        if (hostname === 'youtube.com' || hostname.endsWith('.youtube.com') || hostname === 'youtu.be') {
             return 'youtube';
         }
-        if (hostname.includes('tiktok.com')) {
+
+        // TikTok variants: tiktok.com, vm.tiktok.com, etc.
+        if (hostname === 'tiktok.com' || hostname.endsWith('.tiktok.com')) {
             return 'tiktok';
         }
-        if (hostname.includes('instagram.com')) {
+
+        // Instagram variants: instagram.com, www.instagram.com, etc.
+        if (hostname === 'instagram.com' || hostname.endsWith('.instagram.com')) {
             return 'instagram';
         }
 
         return 'web';
     } catch (e) {
-        // If URL parsing fails, default to web (or handle validation earlier)
         return 'web';
     }
 };

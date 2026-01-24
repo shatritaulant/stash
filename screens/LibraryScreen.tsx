@@ -4,9 +4,10 @@ import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { Save } from '../types';
 import { RootStackParamList } from '../types/navigation';
-import { getSaves, initDatabase, getCategories, deleteSave, getCollections } from '../db';
+import { getSaves, getCategories, deleteSave, getCollections } from '../db';
 import { SaveCard } from '../components/SaveCard';
 import { SearchBar } from '../components/SearchBar';
+import { HighlightedText } from '../components/HighlightedText';
 import { generateEmbedding } from '../services/ai';
 import { Platform } from '../types';
 import { Ionicons } from '@expo/vector-icons';
@@ -35,14 +36,10 @@ export const LibraryScreen = () => {
     const [filterModalVisible, setFilterModalVisible] = useState(false);
     const [searchEmbedding, setSearchEmbedding] = useState<number[] | undefined>(undefined);
 
-    // Initial DB setup
+    // Initial data load
     useEffect(() => {
-        initDatabase()
-            .then(() => {
-                loadCategories();
-                loadCollections();
-            })
-            .catch(e => console.error('DB Init Error:', e));
+        loadCategories();
+        loadCollections();
     }, []);
 
     const loadCollections = async () => {
@@ -104,16 +101,6 @@ export const LibraryScreen = () => {
             loadCategories();
             loadCollections();
 
-            navigation.setOptions({
-                headerRight: () => (
-                    <TouchableOpacity
-                        onPress={() => navigation.navigate('Add')}
-                        style={{ marginRight: 16 }}
-                    >
-                        <Ionicons name="add" size={28} color={colors.accent} />
-                    </TouchableOpacity>
-                ),
-            });
         }, [loadSaves, colors.accent, navigation])
     );
 
@@ -211,7 +198,13 @@ export const LibraryScreen = () => {
                     keyExtractor={(item) => item.id.toString()}
                     numColumns={2}
                     columnWrapperStyle={styles.columnWrapper}
-                    renderItem={({ item }) => <SaveCard item={item} onPress={handlePress} />}
+                    renderItem={({ item }) => (
+                        <SaveCard
+                            item={item}
+                            onPress={handlePress}
+                            searchQuery={search}
+                        />
+                    )}
                     contentContainerStyle={styles.list}
                     ListEmptyComponent={
                         <View style={styles.center}>
@@ -221,6 +214,13 @@ export const LibraryScreen = () => {
                 />
             )}
 
+            <TouchableOpacity
+                style={styles.fab}
+                onPress={() => navigation.navigate('Add')}
+                activeOpacity={0.9}
+            >
+                <Ionicons name="add" size={32} color={colors.accentText} />
+            </TouchableOpacity>
 
             <FilterModal
                 visible={filterModalVisible}
@@ -354,5 +354,21 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     emptyText: {
         color: colors.textMuted,
         fontSize: 16,
+    },
+    fab: {
+        position: 'absolute',
+        bottom: 24,
+        right: 24,
+        width: 56,
+        height: 56,
+        borderRadius: 28,
+        backgroundColor: colors.accent,
+        justifyContent: 'center',
+        alignItems: 'center',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 4.65,
+        elevation: 8,
     },
 });

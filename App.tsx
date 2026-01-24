@@ -13,6 +13,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { BottomTabNavigator } from './navigation/BottomTabNavigator';
 import { useIncomingShare } from './services/IncomingShareService';
 import { useNavigation } from '@react-navigation/native';
+import { initDatabase } from './db';
 
 import { ThemeProvider, useTheme } from './context/ThemeContext';
 import { DefaultTheme } from '@react-navigation/native';
@@ -29,6 +30,10 @@ const ShareHandler = () => {
 
 const AppContent = () => {
   const { colors, isDark } = useTheme();
+
+  React.useEffect(() => {
+    initDatabase().catch(e => console.error('DB Init Error:', e));
+  }, []);
 
   const navigationTheme = {
     ...DefaultTheme,

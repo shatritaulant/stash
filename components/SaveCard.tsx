@@ -8,10 +8,13 @@ import { decodeHtmlEntities } from '../utils/text';
 
 interface SaveCardProps {
     item: Save;
+    searchQuery?: string;
     onPress: (item: Save) => void;
 }
 
-export const SaveCard: React.FC<SaveCardProps> = ({ item, onPress }) => {
+import { HighlightedText } from './HighlightedText';
+
+export const SaveCard: React.FC<SaveCardProps> = ({ item, onPress, searchQuery = '' }) => {
     const { colors } = useTheme();
     const styles = getStyles(colors);
 
@@ -36,7 +39,22 @@ export const SaveCard: React.FC<SaveCardProps> = ({ item, onPress }) => {
             </View>
 
             <View style={styles.content}>
-                <Text style={styles.title} numberOfLines={2}>{decodeHtmlEntities(item.title)}</Text>
+                <HighlightedText
+                    text={decodeHtmlEntities(item.title)}
+                    searchQuery={searchQuery}
+                    style={styles.title}
+                    numberOfLines={2}
+                />
+
+                {/* Show note preview only if it matches search or is short and important */}
+                {item.note && (searchQuery && item.note.toLowerCase().includes(searchQuery.toLowerCase())) && (
+                    <HighlightedText
+                        text={item.note}
+                        searchQuery={searchQuery}
+                        style={styles.notePreview}
+                        numberOfLines={1}
+                    />
+                )}
 
                 <View style={styles.chipContainer}>
                     {(() => {
@@ -45,7 +63,12 @@ export const SaveCard: React.FC<SaveCardProps> = ({ item, onPress }) => {
                             const cats = Array.isArray(parsed) ? parsed : [item.category].filter(Boolean);
                             return cats.slice(0, 2).map((cat, idx) => (
                                 <View key={idx} style={styles.chip}>
-                                    <Text style={styles.chipText} numberOfLines={1}>{cat}</Text>
+                                    <HighlightedText
+                                        text={cat}
+                                        searchQuery={searchQuery}
+                                        style={styles.chipText}
+                                        numberOfLines={1}
+                                    />
                                 </View>
                             ));
                         } catch {
@@ -119,6 +142,11 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
         color: colors.text,
         marginBottom: 2,
         lineHeight: 20,
+    },
+    notePreview: {
+        fontSize: 12,
+        color: colors.textMuted,
+        marginBottom: 4,
     },
     chipContainer: {
         flexDirection: 'row',

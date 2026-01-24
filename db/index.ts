@@ -3,9 +3,8 @@ import { Save, SaveInput, Platform } from '../types';
 
 export const db = SQLite.openDatabaseSync('stash.db');
 
-// ... (previous imports)
-
 export const initDatabase = async () => {
+    // 1. Core saves table and journal mode
     await db.execAsync(`
     PRAGMA journal_mode = WAL;
     CREATE TABLE IF NOT EXISTS saves (
@@ -22,11 +21,9 @@ export const initDatabase = async () => {
       createdAt TEXT NOT NULL,
       updatedAt TEXT NOT NULL
     );
-    -- Handle schema updates for existing databases
-    PRAGMA table_info(saves);
   `);
 
-    // Add columns if they don't exist (primitive migration)
+    // 2. Migration: Add columns if they don't exist
     const columns = await db.getAllAsync<{ name: string }>('PRAGMA table_info(saves)');
     const columnNames = columns.map(c => c.name);
 
@@ -37,6 +34,7 @@ export const initDatabase = async () => {
         await db.execAsync('ALTER TABLE saves ADD COLUMN embedding TEXT');
     }
 
+    // 3. Indexes and other tables
     await db.execAsync(`
     CREATE INDEX IF NOT EXISTS idx_saves_createdAt ON saves (createdAt DESC);
     CREATE INDEX IF NOT EXISTS idx_saves_platform ON saves (platform);
@@ -59,71 +57,8 @@ export const initDatabase = async () => {
     `);
 };
 
-// ... (existing functions: addSave, getSaves, etc. - ensure they are preserved)
-
-// --- Collections API ---
-
-export const createCollection = async (name: string): Promise<number> => {
-    const result = await db.runAsync(
-        'INSERT INTO collections (name, createdAt) VALUES (?, ?)',
-        [name, new Date().toISOString()]
-    );
-    return result.lastInsertRowId;
-};
-
-export const getCollections = async (): Promise<{ id: number; name: string; count: number }[]> => {
-    // Returns collections with item count
-    return await db.getAllAsync(`
-        SELECT c.id, c.name, COUNT(ci.save_id) as count 
-        FROM collections c 
-        LEFT JOIN collection_items ci ON c.id = ci.collection_id 
-        GROUP BY c.id 
-        ORDER BY c.name ASC
-    `);
-};
-
-export const addToCollection = async (saveId: number, collectionId: number): Promise<void> => {
-    await db.runAsync(
-        'INSERT OR IGNORE INTO collection_items (collection_id, save_id, addedAt) VALUES (?, ?, ?)',
-        [collectionId, saveId, new Date().toISOString()]
-    );
-};
-
-export const removeFromCollection = async (saveId: number, collectionId: number): Promise<void> => {
-    await db.runAsync(
-        'DELETE FROM collection_items WHERE collection_id = ? AND save_id = ?',
-        [collectionId, saveId]
-    );
-};
-
-export const getCollectionItems = async (collectionId: number): Promise<Save[]> => {
-    return await db.getAllAsync<Save>(`
-        SELECT s.* FROM saves s
-        JOIN collection_items ci ON s.id = ci.save_id
-        WHERE ci.collection_id = ?
-        ORDER BY ci.addedAt DESC
-    `, [collectionId]);
-};
-
-export const deleteCollection = async (collectionId: number): Promise<void> => {
-    await db.runAsync('DELETE FROM collections WHERE id = ?', [collectionId]);
-};
-
-export const updateCollectionName = async (id: number, name: string): Promise<void> => {
-    await db.runAsync('UPDATE collections SET name = ? WHERE id = ?', [name, id]);
-};
-
-// ... (getCategories and other exports)
-
-
-// ... (imports)
-
-// ...
-
 export const addSave = async (input: SaveInput): Promise<number> => {
     const now = new Date().toISOString();
-    // input.category is expected to be a JSON string here based on caller (AddScreen)
-
     const result = await db.runAsync(
         `INSERT INTO saves (url, title, imageUrl, siteName, platform, category, note, summary, embedding, createdAt, updatedAt)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -141,7 +76,6 @@ export const addSave = async (input: SaveInput): Promise<number> => {
             now,
         ]
     );
-
     return result.lastInsertRowId;
 };
 
@@ -183,15 +117,29 @@ export const getSaves = async (opts?: {
 
     let result = await db.getAllAsync<Save>(query, params);
 
-    // Semantic Search Logic: Merge and Rank
+    // Search Scoring & Ranking Logic
+    if (opts?.search && opts.search.trim().length > 0) {
+        const scoredResults = result.map(item => {
+            let score = 0;
+            // Signal 1: Items with a note (+50)
+            if (item.note && item.note.trim().length > 0) score += 50;
+            // Signal 2: Items with tags (+30)
+            if (item.category && item.category !== '[]' && item.category.trim() !== '') score += 30;
+            // Signal 3: Recency (small boost to break ties and prioritize newer)
+            const ts = new Date(item.createdAt).getTime();
+            score += (ts / 10000000000); // Suble boost for recency
+
+            return { item, score };
+        });
+        scoredResults.sort((a, b) => b.score - a.score);
+        result = scoredResults.map(r => r.item);
+    }
+
+    // Semantic Search Logic (Existing, applied after keyword ranking if triggered)
     if (opts?.searchEmbedding) {
         const queryVec = opts.searchEmbedding;
-
-        // Helper for cosine similarity (internal to avoid circular dependency)
         const calcSim = (vecA: number[], vecB: number[]): number => {
-            let dotProduct = 0.0;
-            let normA = 0.0;
-            let normB = 0.0;
+            let dotProduct = 0.0, normA = 0.0, normB = 0.0;
             for (let i = 0; i < vecA.length; i++) {
                 dotProduct += vecA[i] * (vecB[i] || 0);
                 normA += vecA[i] * vecA[i];
@@ -206,25 +154,13 @@ export const getSaves = async (opts?: {
             if (item.embedding) {
                 try {
                     const itemVec = JSON.parse(item.embedding);
-                    if (Array.isArray(itemVec)) {
-                        semanticScore = calcSim(queryVec, itemVec);
-                    }
-                } catch (e) {
-                    console.warn('Failed to parse embedding for item', item.id);
-                }
+                    if (Array.isArray(itemVec)) semanticScore = calcSim(queryVec, itemVec);
+                } catch (e) { }
             }
             return { item, score: semanticScore };
         });
-
-        // Boost items that also match keyword search (already in result)
-        // Since keyword search already filtered the 'result' array, these are our candidates.
-        // We sort by score descending.
         scoredResults.sort((a, b) => b.score - a.score);
-
         result = scoredResults.map(r => r.item);
-
-        // Optional: Filter out very low similarity results? 
-        // For now, let's just rank them.
     }
 
     // JS Filter for category
@@ -232,15 +168,10 @@ export const getSaves = async (opts?: {
         result = result.filter(save => {
             if (!save.category) return false;
             try {
-                // Try parsing as JSON array
                 const cats = JSON.parse(save.category);
-                if (Array.isArray(cats)) {
-                    return cats.includes(opts.category);
-                }
-                // Fallback for legacy single string
+                if (Array.isArray(cats)) return cats.includes(opts.category!);
                 return save.category === opts.category;
             } catch {
-                // Legacy simple string
                 return save.category === opts.category;
             }
         });
@@ -257,22 +188,10 @@ export const updateSave = async (id: number, updates: Partial<Pick<Save, 'catego
     const parts: string[] = [];
     const params: any[] = [];
 
-    if (updates.category !== undefined) {
-        parts.push('category = ?');
-        params.push(updates.category);
-    }
-    if (updates.note !== undefined) {
-        parts.push('note = ?');
-        params.push(updates.note);
-    }
-    if (updates.summary !== undefined) {
-        parts.push('summary = ?');
-        params.push(updates.summary);
-    }
-    if (updates.embedding !== undefined) {
-        parts.push('embedding = ?');
-        params.push(updates.embedding);
-    }
+    if (updates.category !== undefined) { parts.push('category = ?'); params.push(updates.category); }
+    if (updates.note !== undefined) { parts.push('note = ?'); params.push(updates.note); }
+    if (updates.summary !== undefined) { parts.push('summary = ?'); params.push(updates.summary); }
+    if (updates.embedding !== undefined) { parts.push('embedding = ?'); params.push(updates.embedding); }
 
     if (parts.length === 0) return;
 
@@ -288,23 +207,72 @@ export const deleteSave = async (id: number): Promise<void> => {
 };
 
 export const getCategories = async (): Promise<string[]> => {
-    // Get all categories, then parse and dedup in JS
     const result = await db.getAllAsync<{ category: string }>('SELECT DISTINCT category FROM saves WHERE category IS NOT NULL');
     const allCats = new Set<string>();
-
     result.forEach(r => {
         try {
             const parsed = JSON.parse(r.category);
-            if (Array.isArray(parsed)) {
-                parsed.forEach(c => allCats.add(c));
-            } else {
-                allCats.add(r.category);
-            }
+            if (Array.isArray(parsed)) parsed.forEach(c => allCats.add(c));
+            else allCats.add(r.category);
         } catch {
-            // Not JSON, just a string
             if (r.category) allCats.add(r.category);
         }
     });
-
     return Array.from(allCats).sort();
+};
+
+export const createCollection = async (name: string): Promise<number> => {
+    const result = await db.runAsync(
+        'INSERT INTO collections (name, createdAt) VALUES (?, ?)',
+        [name, new Date().toISOString()]
+    );
+    return result.lastInsertRowId;
+};
+
+export const getCollections = async (): Promise<{ id: number; name: string; count: number }[]> => {
+    return await db.getAllAsync(`
+        SELECT c.id, c.name, COUNT(ci.save_id) as count 
+        FROM collections c 
+        LEFT JOIN collection_items ci ON c.id = ci.collection_id 
+        GROUP BY c.id 
+        ORDER BY c.name ASC
+    `);
+};
+
+export const addToCollection = async (saveId: number, collectionId: number): Promise<void> => {
+    await db.runAsync(
+        'INSERT OR IGNORE INTO collection_items (collection_id, save_id, addedAt) VALUES (?, ?, ?)',
+        [collectionId, saveId, new Date().toISOString()]
+    );
+};
+
+export const removeFromCollection = async (saveId: number, collectionId: number): Promise<void> => {
+    await db.runAsync(
+        'DELETE FROM collection_items WHERE collection_id = ? AND save_id = ?',
+        [collectionId, saveId]
+    );
+};
+
+export const getCollectionItems = async (collectionId: number): Promise<Save[]> => {
+    return await db.getAllAsync<Save>(`
+        SELECT s.* FROM saves s
+        JOIN collection_items ci ON s.id = ci.save_id
+        WHERE ci.collection_id = ?
+        ORDER BY ci.addedAt DESC
+    `, [collectionId]);
+};
+
+export const deleteCollection = async (collectionId: number): Promise<void> => {
+    await db.runAsync('DELETE FROM collections WHERE id = ?', [collectionId]);
+};
+
+export const updateCollectionName = async (id: number, name: string): Promise<void> => {
+    await db.runAsync('UPDATE collections SET name = ? WHERE id = ?', [name, id]);
+};
+export const getSaveCollection = async (saveId: number): Promise<{ id: number; name: string } | null> => {
+    return await db.getFirstAsync<{ id: number; name: string }>(`
+        SELECT c.id, c.name FROM collections c
+        JOIN collection_items ci ON c.id = ci.collection_id
+        WHERE ci.save_id = ?
+    `, [saveId]);
 };
