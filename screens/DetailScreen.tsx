@@ -4,6 +4,7 @@ import { RouteProp, useNavigation, useRoute } from '@react-navigation/native';
 import { Feather, Ionicons } from '@expo/vector-icons';
 import { RootStackParamList } from '../types/navigation';
 import { deleteSave, getSaveById, getSaveCollection, updateSave, getCollections, addToCollection, removeFromCollection, getCategories } from '../db';
+import { enhanceMetadataWithAI } from '../services/ai';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 type DetailScreenRouteProp = RouteProp<RootStackParamList, 'Detail'>;
@@ -51,6 +52,9 @@ export const DetailScreen = () => {
     const [editedTags, setEditedTags] = useState<string[]>([]);
     const [selectedColId, setSelectedColId] = useState<number | null>(null);
     const [showColPicker, setShowColPicker] = useState(false);
+    const [aiSuggestions, setAiSuggestions] = useState<string[]>([]);
+    const [fetchingAiSuggestions, setFetchingAiSuggestions] = useState(false);
+    const aiSuggestionsCache = useRef<Record<string, string[]>>({});
 
     useEffect(() => {
         const fetchData = async () => {
@@ -135,6 +139,36 @@ export const DetailScreen = () => {
         } catch (error) {
             console.error(error);
             Alert.alert('Error', 'Failed to save changes');
+        }
+    };
+
+    const handleFetchAiSuggestions = async () => {
+        if (!save || fetchingAiSuggestions || aiSuggestions.length > 0) return;
+
+        // Check cache
+        if (aiSuggestionsCache.current[save.url]) {
+            setAiSuggestions(aiSuggestionsCache.current[save.url]);
+            return;
+        }
+
+        setFetchingAiSuggestions(true);
+        try {
+            const apiKey = process.env.EXPO_PUBLIC_AI_API_KEY;
+            // For DetailScreen, we might not have the full previewMeta object, but we have the save object
+            const { categories } = await enhanceMetadataWithAI(
+                save.url,
+                save.title || '',
+                save.note || '', // Use note as description context
+                apiKey
+            );
+            if (categories && categories.length > 0) {
+                setAiSuggestions(categories);
+                aiSuggestionsCache.current[save.url] = categories;
+            }
+        } catch (error) {
+            console.error('Failed to fetch AI suggestions:', error);
+        } finally {
+            setFetchingAiSuggestions(false);
         }
     };
 
@@ -283,6 +317,8 @@ export const DetailScreen = () => {
                                     tags={editedTags}
                                     onTagsChange={setEditedTags}
                                     availableSuggestions={allCategories}
+                                    suggestedTags={aiSuggestions}
+                                    onFetchSuggestions={handleFetchAiSuggestions}
                                 />
                             ) : (
                                 <View style={styles.tagsContainer}>

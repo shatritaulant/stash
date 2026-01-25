@@ -100,15 +100,6 @@ export const fetchMetadata = async (url: string): Promise<Metadata> => {
         const twitterDescription = getMeta('twitter:description');
         const bestDescription = ogDescription || descriptionTag || twitterDescription || '';
 
-        // Potential AI Enhancement Point
-        const { categories: aiCategories } = await enhanceMetadataWithAI(url, ogTitle || twitterTitle || titleTag || new URL(url).hostname, bestDescription, process.env.EXPO_PUBLIC_AI_API_KEY);
-        if (aiCategories && aiCategories.length > 0) {
-            finalCategories.push(...aiCategories);
-        }
-
-        // Deduplicate again
-        finalCategories = Array.from(new Set(finalCategories));
-
         // Determine final values
         let title = ogTitle || twitterTitle || titleTag || new URL(url).hostname;
         let imageUrl = ogImage || twitterImage || null;

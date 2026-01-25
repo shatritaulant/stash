@@ -18,12 +18,16 @@ interface TagInputProps {
     tags: string[];
     onTagsChange: (tags: string[]) => void;
     availableSuggestions?: string[];
+    suggestedTags?: string[];
+    onFetchSuggestions?: () => void;
 }
 
 export const TagInput: React.FC<TagInputProps> = ({
     tags,
     onTagsChange,
     availableSuggestions = [],
+    suggestedTags = [],
+    onFetchSuggestions,
 }) => {
     const { colors } = useTheme();
     const styles = getStyles(colors);
@@ -40,13 +44,30 @@ export const TagInput: React.FC<TagInputProps> = ({
         !tags.some(t => t.toLowerCase() === s.toLowerCase())
     );
 
+    // AI Suggestions (filtered by current tags)
+    const filteredAiSuggestions = suggestedTags.filter(s =>
+        !tags.some(t => t.toLowerCase() === s.toLowerCase())
+    ).slice(0, 3);
+
+    const hasAnySuggestions = filteredSuggestions.length > 0 || filteredAiSuggestions.length > 0;
+
     useEffect(() => {
+        let height = 0;
+        if (showSuggestions && hasAnySuggestions) {
+            if (filteredAiSuggestions.length > 0) {
+                height += 60; // AI suggestions section height
+            }
+            if (filteredSuggestions.length > 0) {
+                height += Math.min(filteredSuggestions.length * 40, 160);
+            }
+        }
+
         Animated.timing(suggestionHeight, {
-            toValue: (showSuggestions && filteredSuggestions.length > 0) ? Math.min(filteredSuggestions.length * 40, 160) : 0,
+            toValue: height,
             duration: 200,
             useNativeDriver: false,
         }).start();
-    }, [showSuggestions, filteredSuggestions.length]);
+    }, [showSuggestions, filteredSuggestions.length, filteredAiSuggestions.length]);
 
     const addTag = (tag: string) => {
         const trimmed = tag.trim();
@@ -87,6 +108,7 @@ export const TagInput: React.FC<TagInputProps> = ({
                         style={styles.addTrigger}
                         onPress={() => {
                             setIsInputActive(true);
+                            if (onFetchSuggestions) onFetchSuggestions();
                             setTimeout(() => inputRef.current?.focus(), 100);
                         }}
                     >
@@ -106,7 +128,10 @@ export const TagInput: React.FC<TagInputProps> = ({
                             placeholder="Tag..."
                             placeholderTextColor={colors.textMuted}
                             autoFocus
-                            onFocus={() => setShowSuggestions(true)}
+                            onFocus={() => {
+                                setShowSuggestions(true);
+                                if (onFetchSuggestions) onFetchSuggestions();
+                            }}
                             onBlur={() => {
                                 if (!inputValue.trim()) {
                                     setIsInputActive(false);
@@ -129,15 +154,35 @@ export const TagInput: React.FC<TagInputProps> = ({
             </View>
 
             {/* Suggestions Dropdown */}
-            {(showSuggestions && filteredSuggestions.length > 0) && (
+            {(showSuggestions && hasAnySuggestions) && (
                 <Animated.View style={[
                     styles.suggestions,
                     {
                         height: suggestionHeight,
-                        borderWidth: 1, // Explicitly set here to avoid ghost border when height is 0
+                        borderWidth: 1,
                     }
                 ]}>
                     <ScrollView keyboardShouldPersistTaps="always">
+                        {filteredAiSuggestions.length > 0 && (
+                            <View style={styles.aiSuggestionsContainer}>
+                                <Text style={styles.suggestionLabel}>Suggested</Text>
+                                <View style={styles.aiChips}>
+                                    {filteredAiSuggestions.map((s, i) => (
+                                        <TouchableOpacity
+                                            key={`ai-${s}-${i}`}
+                                            style={styles.aiChip}
+                                            onPress={() => {
+                                                addTag(s);
+                                                inputRef.current?.focus();
+                                            }}
+                                        >
+                                            <Text style={styles.aiChipText}>{s}</Text>
+                                        </TouchableOpacity>
+                                    ))}
+                                </View>
+                            </View>
+                        )}
+
                         {filteredSuggestions.map((s, i) => (
                             <TouchableOpacity
                                 key={`${s}-${i}`}
@@ -147,7 +192,6 @@ export const TagInput: React.FC<TagInputProps> = ({
                                 ]}
                                 onPress={() => {
                                     addTag(s);
-                                    // Keep input active and focused
                                     inputRef.current?.focus();
                                 }}
                             >
@@ -241,7 +285,38 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
         borderColor: colors.border,
         borderTopWidth: 0,
         overflow: 'hidden',
-        marginTop: -4, // Overlap border slightly
+        marginTop: -4,
+    },
+    aiSuggestionsContainer: {
+        padding: 12,
+        borderBottomWidth: 1,
+        borderBottomColor: colors.border,
+    },
+    suggestionLabel: {
+        fontSize: 10,
+        fontWeight: '700',
+        color: colors.textMuted,
+        textTransform: 'uppercase',
+        marginBottom: 8,
+        letterSpacing: 0.5,
+    },
+    aiChips: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        gap: 8,
+    },
+    aiChip: {
+        backgroundColor: colors.surfaceAlt,
+        paddingHorizontal: 10,
+        paddingVertical: 4,
+        borderRadius: 6,
+        borderWidth: 1,
+        borderColor: colors.border,
+    },
+    aiChipText: {
+        fontSize: 12,
+        color: colors.text,
+        fontWeight: '500',
     },
     suggestionItem: {
         flexDirection: 'row',

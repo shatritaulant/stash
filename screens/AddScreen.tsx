@@ -18,7 +18,7 @@ import { StackNavigationProp } from '@react-navigation/stack';
 import { RootStackParamList } from '../types/navigation';
 import { addSave, getCategories, createCollection, addToCollection, getCollections } from '../db';
 import { fetchMetadata } from '../services/metadata';
-import { enrichSaveWithAI } from '../services/ai';
+import { enrichSaveWithAI, enhanceMetadataWithAI } from '../services/ai';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Clipboard from 'expo-clipboard';
@@ -44,6 +44,9 @@ export const AddScreen = () => {
     const [loading, setLoading] = useState(false);
     const [analyzing, setAnalyzing] = useState(false);
     const [previewMeta, setPreviewMeta] = useState<any>(null);
+    const [aiSuggestions, setAiSuggestions] = useState<string[]>([]);
+    const [fetchingAiSuggestions, setFetchingAiSuggestions] = useState(false);
+    const aiSuggestionsCache = useRef<Record<string, string[]>>({});
 
     // Collections
     type CollectionItem = { id: number; name: string };
@@ -101,11 +104,7 @@ export const AddScreen = () => {
             try {
                 const meta = await fetchMetadata(trimmed);
                 setPreviewMeta(meta);
-                if (meta) {
-                    if (meta.categories && meta.categories.length > 0) {
-                        setTags(meta.categories);
-                    }
-                }
+                setAiSuggestions([]); // Reset suggestions for new URL
             } catch (e) {
                 console.log('Pre-fetch analysis failed', e);
             } finally {
@@ -132,6 +131,36 @@ export const AddScreen = () => {
         setUrl('');
         setPreviewMeta(null);
         setTags([]);
+        setAiSuggestions([]);
+    };
+
+    const handleFetchAiSuggestions = async () => {
+        if (!url || !previewMeta || fetchingAiSuggestions || aiSuggestions.length > 0) return;
+
+        // Check cache
+        if (aiSuggestionsCache.current[url]) {
+            setAiSuggestions(aiSuggestionsCache.current[url]);
+            return;
+        }
+
+        setFetchingAiSuggestions(true);
+        try {
+            const apiKey = process.env.EXPO_PUBLIC_AI_API_KEY;
+            const { categories } = await enhanceMetadataWithAI(
+                url,
+                previewMeta.title || url,
+                previewMeta.description || '',
+                apiKey
+            );
+            if (categories && categories.length > 0) {
+                setAiSuggestions(categories);
+                aiSuggestionsCache.current[url] = categories;
+            }
+        } catch (error) {
+            console.error('Failed to fetch AI suggestions:', error);
+        } finally {
+            setFetchingAiSuggestions(false);
+        }
     };
 
     const toggleCollectionModal = () => {
@@ -301,6 +330,8 @@ export const AddScreen = () => {
                         tags={tags}
                         onTagsChange={setTags}
                         availableSuggestions={allCategories}
+                        suggestedTags={aiSuggestions}
+                        onFetchSuggestions={handleFetchAiSuggestions}
                     />
                 </View>
 
