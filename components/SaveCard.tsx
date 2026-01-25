@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, Image, StyleSheet, TouchableOpacity } from 'react-native';
-import { Save } from '../types';
+import { Save, Platform } from '../types';
+import { Ionicons } from '@expo/vector-icons';
 
 import { useTheme } from '../context/ThemeContext';
 import { ThemeColors } from '../constants/theme';
@@ -13,6 +14,19 @@ interface SaveCardProps {
 }
 
 import { HighlightedText } from './HighlightedText';
+
+const getPlatformIcon = (platform: string): keyof typeof Ionicons.glyphMap => {
+    switch (platform as Platform) {
+        case 'youtube': return 'logo-youtube';
+        case 'tiktok': return 'logo-tiktok';
+        case 'instagram': return 'logo-instagram';
+        default: return 'globe-outline';
+    }
+};
+
+const getPlatformColor = (colors: ThemeColors): string => {
+    return colors.text;
+};
 
 export const SaveCard: React.FC<SaveCardProps> = ({ item, onPress, searchQuery = '' }) => {
     const { colors } = useTheme();
@@ -29,7 +43,12 @@ export const SaveCard: React.FC<SaveCardProps> = ({ item, onPress, searchQuery =
                     </View>
                 )}
                 <View style={styles.badge}>
-                    <Text style={styles.badgeText}>{item.platform}</Text>
+                    <Ionicons
+                        name={getPlatformIcon(item.platform)}
+                        size={18}
+                        color={getPlatformColor(colors)}
+                        style={styles.platformIcon}
+                    />
                 </View>
                 {item.summary && (
                     <View style={styles.aiBadge}>
@@ -121,16 +140,13 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
         position: 'absolute',
         top: 8,
         right: 8,
-        backgroundColor: 'rgba(0,0,0,0.6)',
-        paddingHorizontal: 8,
-        paddingVertical: 4,
-        borderRadius: 6,
+        justifyContent: 'center',
+        alignItems: 'center',
     },
-    badgeText: {
-        color: '#fff',
-        fontSize: 10,
-        fontWeight: 'bold',
-        textTransform: 'uppercase',
+    platformIcon: {
+        textShadowColor: 'rgba(0,0,0,0.3)',
+        textShadowOffset: { width: 0, height: 1 },
+        textShadowRadius: 3,
     },
     content: {
         padding: 10,

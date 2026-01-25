@@ -1,9 +1,9 @@
-import React from 'react';
-import { View, Text, StyleSheet, Image, ScrollView, TouchableOpacity, Share, Linking, Alert } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import { View, Text, StyleSheet, Image, ScrollView, TouchableOpacity, Share, Linking, Alert, TextInput, Modal, Pressable } from 'react-native';
 import { RouteProp, useNavigation, useRoute } from '@react-navigation/native';
-import { Feather } from '@expo/vector-icons';
+import { Feather, Ionicons } from '@expo/vector-icons';
 import { RootStackParamList } from '../types/navigation';
-import { deleteSave, getSaveById, getSaveCollection } from '../db';
+import { deleteSave, getSaveById, getSaveCollection, updateSave, getCollections, addToCollection, removeFromCollection, getCategories } from '../db';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 type DetailScreenRouteProp = RouteProp<RootStackParamList, 'Detail'>;
@@ -11,6 +11,26 @@ type DetailScreenRouteProp = RouteProp<RootStackParamList, 'Detail'>;
 import { useTheme } from '../context/ThemeContext';
 import { decodeHtmlEntities } from '../utils/text';
 import { ThemeColors } from '../constants/theme';
+import { Platform as AppPlatform } from '../types';
+import { TagInput } from '../components/TagInput';
+
+const getPlatformIcon = (platform: AppPlatform): keyof typeof Ionicons.glyphMap => {
+    switch (platform) {
+        case 'youtube': return 'logo-youtube';
+        case 'tiktok': return 'logo-tiktok';
+        case 'instagram': return 'logo-instagram';
+        default: return 'globe-outline';
+    }
+};
+
+const getPlatformColor = (platform: AppPlatform): string => {
+    switch (platform) {
+        case 'youtube': return '#FF0000';
+        case 'tiktok': return '#000000';
+        case 'instagram': return '#E1306C';
+        default: return '#2563EB';
+    }
+};
 
 export const DetailScreen = () => {
     const { colors, isDark } = useTheme();
@@ -18,21 +38,105 @@ export const DetailScreen = () => {
     const route = useRoute<DetailScreenRouteProp>();
     const navigation = useNavigation();
     const { save: initialSave } = route.params;
+
+    // Core data state
     const [save, setSave] = React.useState(initialSave);
     const [collection, setCollection] = React.useState<{ id: number; name: string } | null>(null);
+    const [allCollections, setAllCollections] = React.useState<{ id: number; name: string }[]>([]);
+    const [allCategories, setAllCategories] = React.useState<string[]>([]);
 
-    React.useEffect(() => {
+    // Editing state
+    const [isEditing, setIsEditing] = useState(false);
+    const [editedNote, setEditedNote] = useState('');
+    const [editedTags, setEditedTags] = useState<string[]>([]);
+    const [selectedColId, setSelectedColId] = useState<number | null>(null);
+    const [showColPicker, setShowColPicker] = useState(false);
+
+    useEffect(() => {
         const fetchData = async () => {
             if (save?.id) {
                 const fresh = await getSaveById(save.id);
-                if (fresh) setSave(fresh);
+                if (fresh) {
+                    setSave(fresh);
+                    setEditedNote(fresh.note || '');
+                    try {
+                        const parsed = JSON.parse(fresh.category || '[]');
+                        setEditedTags(Array.isArray(parsed) ? parsed : []);
+                    } catch {
+                        setEditedTags(fresh.category ? [fresh.category] : []);
+                    }
+                }
 
                 const col = await getSaveCollection(save.id);
                 setCollection(col);
+                setSelectedColId(col?.id || null);
+
+                const cols = await getCollections();
+                setAllCollections(cols);
+
+                const cats = await getCategories();
+                setAllCategories(cats);
             }
         };
         fetchData();
     }, [save?.id]);
+
+    useEffect(() => {
+        navigation.setOptions({
+            headerRight: () => (
+                <TouchableOpacity
+                    onPress={() => isEditing ? handleSaveEdits() : setIsEditing(true)}
+                    style={{ marginRight: 16 }}
+                >
+                    {isEditing ? (
+                        <Text style={{
+                            color: colors.accent,
+                            fontWeight: '600',
+                            fontSize: 16
+                        }}>Done</Text>
+                    ) : (
+                        <Feather name="edit-3" size={20} color={colors.text} />
+                    )}
+                </TouchableOpacity>
+            ),
+        });
+    }, [isEditing, editedNote, editedTags, selectedColId, collection, colors]);
+
+    const handleSaveEdits = async () => {
+        if (!save) return;
+
+        try {
+            // Update Save Table
+            const categoryJson = JSON.stringify(editedTags);
+            await updateSave(save.id, {
+                note: editedNote,
+                category: categoryJson
+            });
+
+            // Update Collection
+            if (selectedColId !== collection?.id) {
+                if (collection?.id) {
+                    await removeFromCollection(save.id, collection.id);
+                }
+                if (selectedColId) {
+                    await addToCollection(save.id, selectedColId);
+                }
+                const newCol = selectedColId
+                    ? allCollections.find(c => c.id === selectedColId) || null
+                    : null;
+                setCollection(newCol ? { id: newCol.id, name: newCol.name } : null);
+            }
+
+            // Refresh state
+            const fresh = await getSaveById(save.id);
+            if (fresh) setSave(fresh);
+
+            setIsEditing(false);
+        } catch (error) {
+            console.error(error);
+            Alert.alert('Error', 'Failed to save changes');
+        }
+    };
 
     if (!save) return null;
 
@@ -76,7 +180,7 @@ export const DetailScreen = () => {
         );
     };
 
-    // Parse categories safely
+    // Parse categories for read-only view
     let categories: string[] = [];
     try {
         if (save.category && save.category.startsWith('[')) {
@@ -105,33 +209,65 @@ export const DetailScreen = () => {
                     <Text style={styles.title}>{decodeHtmlEntities(save.title) || 'Untitled Link'}</Text>
 
                     <View style={styles.metaRow}>
-                        <Text style={styles.platformText}>{save.platform}</Text>
+                        <Ionicons
+                            name={getPlatformIcon(save.platform as AppPlatform)}
+                            size={16}
+                            color={getPlatformColor(save.platform as AppPlatform)}
+                        />
                         <Text style={styles.dot}>•</Text>
                         <Text style={styles.metaDate}>{new Date(save.createdAt).toLocaleDateString()}</Text>
-                        {collection && (
+
+                        {(isEditing || collection) && (
                             <>
                                 <Text style={styles.dot}>•</Text>
-                                <Text style={styles.collectionText}>{collection.name}</Text>
+                                <TouchableOpacity
+                                    disabled={!isEditing}
+                                    onPress={() => setShowColPicker(true)}
+                                    style={[
+                                        styles.collectionPill,
+                                        isEditing && { borderColor: colors.accent, borderWidth: 1 }
+                                    ]}
+                                >
+                                    <Ionicons name="folder-outline" size={14} color={isEditing ? colors.accent : colors.textMuted} />
+                                    <Text style={[
+                                        styles.collectionText,
+                                        isEditing && { color: colors.accent }
+                                    ]}>
+                                        {isEditing
+                                            ? (allCollections.find(c => c.id === selectedColId)?.name || 'None')
+                                            : collection?.name}
+                                    </Text>
+                                    {isEditing && <Ionicons name="chevron-down" size={12} color={colors.accent} style={{ marginLeft: 2 }} />}
+                                </TouchableOpacity>
                             </>
                         )}
                     </View>
 
-                    {categories.length > 0 && (
-                        <View style={styles.categoriesRow}>
-                            {categories.map((cat, index) => (
-                                <View key={index} style={styles.chip}>
-                                    <Text style={styles.chipText}>{cat}</Text>
-                                </View>
-                            ))}
+                    {(isEditing || save.note) && (
+                        <View style={styles.section}>
+                            <Text style={styles.sectionLabel}>Note</Text>
+                            {isEditing ? (
+                                <TextInput
+                                    style={styles.editableNote}
+                                    value={editedNote}
+                                    onChangeText={setEditedNote}
+                                    multiline
+                                    placeholder="Add a note..."
+                                    placeholderTextColor={colors.textMuted}
+                                    onBlur={handleSaveEdits}
+                                />
+                            ) : (
+                                <Text style={styles.noteBody}>{save.note}</Text>
+                            )}
                         </View>
                     )}
 
-                    {save.summary && (
-                        <View style={styles.aiSummarySection}>
-                            <Text style={styles.sectionLabel}>AI SUMMARY</Text>
-                            <View style={styles.aiSummaryContent}>
+                    {save.summary && !isEditing && (
+                        <View style={[styles.section, styles.summarySection]}>
+                            <Text style={styles.sectionLabel}>Summary</Text>
+                            <View style={styles.summaryContent}>
                                 {save.summary.split('\n').map((line, i) => (
-                                    <Text key={i} style={styles.aiSummaryItem}>
+                                    <Text key={i} style={styles.summaryText}>
                                         {line.trim().startsWith('-') || line.trim().startsWith('•') ? line.trim() : `• ${line.trim()}`}
                                     </Text>
                                 ))}
@@ -139,12 +275,26 @@ export const DetailScreen = () => {
                         </View>
                     )}
 
-                    {save.note ? (
-                        <View style={styles.noteSection}>
-                            <Text style={styles.sectionLabel}>NOTE</Text>
-                            <Text style={styles.noteBody}>{save.note}</Text>
+                    {(isEditing || categories.length > 0) && (
+                        <View style={styles.section}>
+                            <Text style={styles.sectionLabel}>Tags</Text>
+                            {isEditing ? (
+                                <TagInput
+                                    tags={editedTags}
+                                    onTagsChange={setEditedTags}
+                                    availableSuggestions={allCategories}
+                                />
+                            ) : (
+                                <View style={styles.tagsContainer}>
+                                    {categories.map((cat, index) => (
+                                        <View key={index} style={styles.tagChip}>
+                                            <Text style={styles.tagText}>{cat}</Text>
+                                        </View>
+                                    ))}
+                                </View>
+                            )}
                         </View>
-                    ) : null}
+                    )}
 
                     <View style={styles.actionContainer}>
                         <TouchableOpacity style={styles.openButton} onPress={handleOpenLink}>
@@ -153,18 +303,50 @@ export const DetailScreen = () => {
                         </TouchableOpacity>
 
                         <View style={styles.secondaryActions}>
-                            <TouchableOpacity style={styles.secondaryButton} onPress={handleShare}>
-                                <Feather name="share-2" size={18} color={colors.text} />
-                                <Text style={styles.secondaryButtonText}>Share</Text>
+                            <TouchableOpacity style={styles.iconButton} onPress={handleShare}>
+                                <Feather name="share-2" size={20} color={colors.text} />
                             </TouchableOpacity>
-                            <TouchableOpacity style={[styles.secondaryButton, styles.deleteButton]} onPress={handleDelete}>
-                                <Feather name="trash-2" size={18} color="#EF4444" />
-                                <Text style={[styles.secondaryButtonText, { color: '#EF4444' }]}>Delete</Text>
+                            <TouchableOpacity style={styles.iconButton} onPress={handleDelete}>
+                                <Feather name="trash-2" size={20} color={colors.text} />
                             </TouchableOpacity>
                         </View>
                     </View>
                 </View>
             </ScrollView>
+
+            {/* Collection Picker Modal */}
+            <Modal
+                visible={showColPicker}
+                transparent
+                animationType="fade"
+                onRequestClose={() => setShowColPicker(false)}
+            >
+                <Pressable style={styles.modalOverlay} onPress={() => setShowColPicker(false)}>
+                    <View style={styles.modalContent}>
+                        <Text style={styles.modalTitle}>Choose Collection</Text>
+                        <ScrollView style={{ maxHeight: 300 }}>
+                            <TouchableOpacity
+                                style={[styles.modalItem, selectedColId === null && styles.modalItemSelected]}
+                                onPress={() => { setSelectedColId(null); setShowColPicker(false); }}
+                            >
+                                <Text style={[styles.modalItemText, selectedColId === null && styles.modalItemTextSelected]}>None</Text>
+                            </TouchableOpacity>
+                            {allCollections.map(col => (
+                                <TouchableOpacity
+                                    key={col.id}
+                                    style={[styles.modalItem, selectedColId === col.id && styles.modalItemSelected]}
+                                    onPress={() => { setSelectedColId(col.id); setShowColPicker(false); }}
+                                >
+                                    <Text style={[styles.modalItemText, selectedColId === col.id && styles.modalItemTextSelected]}>{col.name}</Text>
+                                </TouchableOpacity>
+                            ))}
+                        </ScrollView>
+                        <TouchableOpacity style={styles.modalCloseBtn} onPress={() => setShowColPicker(false)}>
+                            <Text style={styles.modalCloseBtnText}>Cancel</Text>
+                        </TouchableOpacity>
+                    </View>
+                </Pressable>
+            </Modal>
         </SafeAreaView>
     );
 };
@@ -191,88 +373,96 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
         padding: 24,
     },
     title: {
-        fontSize: 26,
-        fontWeight: '800',
+        fontSize: 28,
+        fontWeight: '700',
         color: colors.text,
-        marginBottom: 8,
-        lineHeight: 34,
+        marginBottom: 12,
+        lineHeight: 36,
     },
     metaRow: {
         flexDirection: 'row',
         alignItems: 'center',
-        marginBottom: 20,
-    },
-    platformText: {
-        fontSize: 13,
-        fontWeight: '700',
-        color: colors.textMuted,
-        textTransform: 'uppercase',
-        letterSpacing: 0.5,
+        marginBottom: 24,
     },
     metaDate: {
-        fontSize: 13,
+        fontSize: 14,
         color: colors.textMuted,
-    },
-    collectionText: {
-        fontSize: 13,
-        fontWeight: '600',
-        color: colors.accent,
     },
     dot: {
         marginHorizontal: 8,
         color: colors.textMuted,
         opacity: 0.4,
     },
-    categoriesRow: {
+    collectionPill: {
         flexDirection: 'row',
-        flexWrap: 'wrap',
-        gap: 6,
+        alignItems: 'center',
+        backgroundColor: colors.surfaceAlt,
+        paddingHorizontal: 8,
+        paddingVertical: 4,
+        borderRadius: 6,
+        gap: 4,
+    },
+    collectionText: {
+        fontSize: 13,
+        fontWeight: '600',
+        color: colors.textMuted,
+    },
+    section: {
         marginBottom: 24,
     },
-    chip: {
-        backgroundColor: colors.surfaceAlt,
-        paddingHorizontal: 10,
-        paddingVertical: 5,
-        borderRadius: 8,
-    },
-    chipText: {
-        fontSize: 13,
-        color: colors.textMuted,
-        fontWeight: '600',
-    },
     sectionLabel: {
-        fontSize: 11,
-        fontWeight: '800',
+        fontSize: 12,
+        fontWeight: '600',
         color: colors.textMuted,
-        letterSpacing: 1.5,
-        textTransform: 'uppercase',
-        marginBottom: 12,
-    },
-    aiSummarySection: {
-        marginBottom: 28,
-        paddingLeft: 16,
-        borderLeftWidth: 3,
-        borderLeftColor: colors.accent + '33',
-    },
-    aiSummaryContent: {
-        gap: 6,
-    },
-    aiSummaryItem: {
-        fontSize: 15,
-        color: colors.text,
-        lineHeight: 24,
-        opacity: 0.9,
-    },
-    noteSection: {
-        marginBottom: 32,
+        marginBottom: 8,
     },
     noteBody: {
         fontSize: 16,
         color: colors.text,
-        lineHeight: 26,
+        lineHeight: 24,
+    },
+    editableNote: {
+        fontSize: 16,
+        color: colors.text,
+        lineHeight: 24,
+        backgroundColor: colors.surfaceAlt,
+        borderRadius: 8,
+        padding: 12,
+        minHeight: 80,
+        textAlignVertical: 'top',
+    },
+    summarySection: {
+        backgroundColor: colors.surfaceAlt + '44',
+        padding: 16,
+        borderRadius: 12,
+    },
+    summaryContent: {
+        gap: 6,
+    },
+    summaryText: {
+        fontSize: 15,
+        color: colors.text,
+        lineHeight: 22,
+        opacity: 0.9,
+    },
+    tagsContainer: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        gap: 6,
+    },
+    tagChip: {
+        backgroundColor: colors.surfaceAlt,
+        paddingHorizontal: 10,
+        paddingVertical: 4,
+        borderRadius: 20,
+    },
+    tagText: {
+        fontSize: 13,
+        color: colors.textMuted,
+        fontWeight: '500',
     },
     actionContainer: {
-        marginTop: 20,
+        marginTop: 8,
         gap: 12,
     },
     openButton: {
@@ -287,15 +477,14 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
     openButtonText: {
         color: colors.accentText,
         fontSize: 16,
-        fontWeight: '800',
+        fontWeight: '700',
     },
     secondaryActions: {
         flexDirection: 'row',
         gap: 12,
     },
-    secondaryButton: {
+    iconButton: {
         flex: 1,
-        flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'center',
         backgroundColor: colors.surface,
@@ -303,14 +492,56 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
         borderRadius: 14,
         borderWidth: 1,
         borderColor: colors.border,
-        gap: 8,
     },
-    secondaryButtonText: {
+    // Modal Styles
+    modalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0,0,0,0.5)',
+        justifyContent: 'center',
+        padding: 24,
+    },
+    modalContent: {
+        backgroundColor: colors.surface,
+        borderRadius: 16,
+        padding: 20,
+        elevation: 5,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.25,
+        shadowRadius: 4,
+    },
+    modalTitle: {
+        fontSize: 18,
+        fontWeight: 'bold',
         color: colors.text,
-        fontSize: 15,
-        fontWeight: '700',
+        marginBottom: 16,
+        textAlign: 'center',
     },
-    deleteButton: {
-        borderColor: '#EF444433',
+    modalItem: {
+        paddingVertical: 12,
+        paddingHorizontal: 16,
+        borderRadius: 8,
+        marginBottom: 4,
+    },
+    modalItemSelected: {
+        backgroundColor: colors.accent,
+    },
+    modalItemText: {
+        fontSize: 16,
+        color: colors.text,
+    },
+    modalItemTextSelected: {
+        color: colors.accentText,
+        fontWeight: 'bold',
+    },
+    modalCloseBtn: {
+        marginTop: 16,
+        padding: 12,
+        alignItems: 'center',
+    },
+    modalCloseBtnText: {
+        color: colors.textMuted,
+        fontWeight: '600',
     },
 });
+
