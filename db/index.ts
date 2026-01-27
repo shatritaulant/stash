@@ -1,9 +1,46 @@
 import * as SQLite from 'expo-sqlite';
 import { Save, SaveInput, Platform } from '../types';
+import { AppGroupService } from '../services/AppGroupService';
 
-export const db = SQLite.openDatabaseSync('stash.db');
+let db: SQLite.SQLiteDatabase | null = null;
+
+export const getDb = async () => {
+    if (!db) {
+        db = await SQLite.openDatabaseAsync('stash.db');
+    }
+    return db;
+};
+
+const syncCollectionsToAppGroup = async () => {
+    try {
+        const collections = await getCollections();
+        await AppGroupService.syncCollections(
+            collections.map(c => ({ id: c.id.toString(), name: c.name }))
+        );
+    } catch (error) {
+        console.error('Failed to sync collections to App Group:', error);
+    }
+};
+
+const syncTagsToAppGroup = async () => {
+    try {
+        const categories = await getCategories();
+        await AppGroupService.syncTags(categories);
+    } catch (error) {
+        console.error('Failed to sync tags to App Group:', error);
+    }
+};
+
+const syncAllToAppGroup = async () => {
+    await Promise.all([
+        syncCollectionsToAppGroup(),
+        syncTagsToAppGroup()
+    ]);
+};
 
 export const initDatabase = async () => {
+    const db = await getDb();
+
     // 1. Core saves table and journal mode
     await db.execAsync(`
     PRAGMA journal_mode = WAL;
@@ -55,9 +92,13 @@ export const initDatabase = async () => {
       FOREIGN KEY (save_id) REFERENCES saves(id) ON DELETE CASCADE
     );
     `);
+
+    await syncAllToAppGroup();
 };
 
 export const addSave = async (input: SaveInput): Promise<number> => {
+    const db = await getDb();
+
     const now = new Date().toISOString();
     const result = await db.runAsync(
         `INSERT INTO saves (url, title, imageUrl, siteName, platform, category, note, summary, embedding, createdAt, updatedAt)
@@ -76,6 +117,7 @@ export const addSave = async (input: SaveInput): Promise<number> => {
             now,
         ]
     );
+    await syncTagsToAppGroup();
     return result.lastInsertRowId;
 };
 
@@ -87,6 +129,8 @@ export const getSaves = async (opts?: {
     collectionId?: number | 'all';
     searchEmbedding?: number[];
 }): Promise<Save[]> => {
+    const db = await getDb();
+
     let query = 'SELECT s.* FROM saves s';
     const whereClauses: string[] = [];
     const params: any[] = [];
@@ -181,10 +225,14 @@ export const getSaves = async (opts?: {
 };
 
 export const getSaveById = async (id: number): Promise<Save | null> => {
+    const db = await getDb();
+
     return await db.getFirstAsync<Save>('SELECT * FROM saves WHERE id = ?', [id]);
 };
 
 export const updateSave = async (id: number, updates: Partial<Pick<Save, 'category' | 'note' | 'summary' | 'embedding'>>): Promise<void> => {
+    const db = await getDb();
+
     const parts: string[] = [];
     const params: any[] = [];
 
@@ -200,13 +248,21 @@ export const updateSave = async (id: number, updates: Partial<Pick<Save, 'catego
 
     const query = `UPDATE saves SET ${parts.join(', ')} WHERE id = ?`;
     await db.runAsync(query, [...params, id]);
+    if (updates.category !== undefined) {
+        await syncTagsToAppGroup();
+    }
 };
 
 export const deleteSave = async (id: number): Promise<void> => {
+    const db = await getDb();
+
     await db.runAsync('DELETE FROM saves WHERE id = ?', [id]);
+    await syncTagsToAppGroup();
 };
 
 export const getCategories = async (): Promise<string[]> => {
+    const db = await getDb();
+
     const result = await db.getAllAsync<{ category: string }>('SELECT DISTINCT category FROM saves WHERE category IS NOT NULL');
     const allCats = new Set<string>();
     result.forEach(r => {
@@ -222,14 +278,19 @@ export const getCategories = async (): Promise<string[]> => {
 };
 
 export const createCollection = async (name: string): Promise<number> => {
+    const db = await getDb();
+
     const result = await db.runAsync(
         'INSERT INTO collections (name, createdAt) VALUES (?, ?)',
         [name, new Date().toISOString()]
     );
+    await syncAllToAppGroup();
     return result.lastInsertRowId;
 };
 
 export const getCollections = async (): Promise<{ id: number; name: string; count: number }[]> => {
+    const db = await getDb();
+
     return await db.getAllAsync(`
         SELECT c.id, c.name, COUNT(ci.save_id) as count 
         FROM collections c 
@@ -240,6 +301,8 @@ export const getCollections = async (): Promise<{ id: number; name: string; coun
 };
 
 export const addToCollection = async (saveId: number, collectionId: number): Promise<void> => {
+    const db = await getDb();
+
     await db.runAsync(
         'INSERT OR IGNORE INTO collection_items (collection_id, save_id, addedAt) VALUES (?, ?, ?)',
         [collectionId, saveId, new Date().toISOString()]
@@ -247,6 +310,8 @@ export const addToCollection = async (saveId: number, collectionId: number): Pro
 };
 
 export const removeFromCollection = async (saveId: number, collectionId: number): Promise<void> => {
+    const db = await getDb();
+
     await db.runAsync(
         'DELETE FROM collection_items WHERE collection_id = ? AND save_id = ?',
         [collectionId, saveId]
@@ -254,6 +319,8 @@ export const removeFromCollection = async (saveId: number, collectionId: number)
 };
 
 export const getCollectionItems = async (collectionId: number): Promise<Save[]> => {
+    const db = await getDb();
+
     return await db.getAllAsync<Save>(`
         SELECT s.* FROM saves s
         JOIN collection_items ci ON s.id = ci.save_id
@@ -263,13 +330,21 @@ export const getCollectionItems = async (collectionId: number): Promise<Save[]> 
 };
 
 export const deleteCollection = async (collectionId: number): Promise<void> => {
+    const db = await getDb();
+
     await db.runAsync('DELETE FROM collections WHERE id = ?', [collectionId]);
+    await syncAllToAppGroup();
 };
 
 export const updateCollectionName = async (id: number, name: string): Promise<void> => {
+    const db = await getDb();
+
     await db.runAsync('UPDATE collections SET name = ? WHERE id = ?', [name, id]);
+    await syncAllToAppGroup();
 };
 export const getSaveCollection = async (saveId: number): Promise<{ id: number; name: string } | null> => {
+    const db = await getDb();
+
     return await db.getFirstAsync<{ id: number; name: string }>(`
         SELECT c.id, c.name FROM collections c
         JOIN collection_items ci ON c.id = ci.collection_id

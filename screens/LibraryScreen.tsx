@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { View, StyleSheet, FlatList, ActivityIndicator, Text, TouchableOpacity, Alert, Dimensions, ScrollView } from 'react-native';
+import { View, StyleSheet, FlatList, ActivityIndicator, Text, TouchableOpacity, Alert, Dimensions, ScrollView, DeviceEventEmitter } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { Save } from '../types';
@@ -101,6 +101,13 @@ export const LibraryScreen = () => {
             loadCategories();
             loadCollections();
 
+            const sub = DeviceEventEmitter.addListener('RELOAD_SAVES', () => {
+                loadSaves();
+                loadCategories();
+                loadCollections();
+            });
+
+            return () => sub.remove();
         }, [loadSaves, colors.accent, navigation])
     );
 

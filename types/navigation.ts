@@ -10,7 +10,7 @@ export type RootTabParamList = {
 export type RootStackParamList = {
     Home: NavigatorScreenParams<RootTabParamList>;
     Library: undefined; // Keeping for now if needed, but Home replaces it as root
-    Add: { url?: string } | undefined;
+    Add: { url?: string; note?: string; collectionId?: string } | undefined;
     Account: undefined;
     Detail: { saveId: number; save?: Save };
     Edit: { save: Save };

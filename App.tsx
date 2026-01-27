@@ -1,12 +1,10 @@
 import React from 'react';
-import { NavigationContainer, DarkTheme } from '@react-navigation/native';
+import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { RootStackParamList } from './types/navigation';
 import { AddScreen } from './screens/AddScreen';
 import { DetailScreen } from './screens/DetailScreen';
 import { EditScreen } from './screens/EditScreen';
-import { LibraryScreen } from './screens/LibraryScreen';
-import { CollectionsScreen } from './screens/CollectionsScreen';
 import { CollectionDetailScreen } from './screens/CollectionDetailScreen';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -22,18 +20,27 @@ const Stack = createStackNavigator<RootStackParamList>();
 
 const ShareHandler = () => {
   const navigation = useNavigation<any>();
-  useIncomingShare((url) => {
-    navigation.navigate('Add', { url });
+  useIncomingShare((share) => {
+    navigation.navigate('Add', {
+      url: share.url,
+      note: share.note,
+      collectionId: share.collectionId
+    });
   });
   return null;
 };
 
 const AppContent = () => {
   const { colors, isDark } = useTheme();
+  const [dbReady, setDbReady] = React.useState(false);
 
   React.useEffect(() => {
-    initDatabase().catch(e => console.error('DB Init Error:', e));
+    initDatabase()
+      .then(() => setDbReady(true))
+      .catch(e => console.error('DB Init Error:', e));
   }, []);
+
+  if (!dbReady) return null;
 
   const navigationTheme = {
     ...DefaultTheme,
@@ -90,7 +97,7 @@ const AppContent = () => {
           options={{
             title: '',
             headerTransparent: true,
-            headerTintColor: '#fff', // Keep white for detailed view over image
+            headerTintColor: '#fff',
           }}
         />
         <Stack.Screen

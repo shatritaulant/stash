@@ -34,15 +34,16 @@ export const BottomTabNavigator = () => {
                     backgroundColor: colors.surface,
                     borderTopColor: colors.border,
                     borderTopWidth: 1,
-                    height: 60,
-                    paddingBottom: 8,
-                    paddingTop: 8,
+                    // Remove hardcoded height to let React Navigation handle iOS safe areas
                     // Shadow for depth
                     shadowColor: '#000',
                     shadowOffset: { width: 0, height: -4 },
                     shadowOpacity: 0.1,
                     shadowRadius: 8,
                     elevation: 10,
+                },
+                tabBarItemStyle: {
+                    paddingVertical: 4, // Ensures touch target is sufficiently high
                 },
                 tabBarActiveTintColor: colors.accent,
                 tabBarInactiveTintColor: colors.textMuted,

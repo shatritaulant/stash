@@ -20,6 +20,7 @@ interface TagInputProps {
     availableSuggestions?: string[];
     suggestedTags?: string[];
     onFetchSuggestions?: () => void;
+    inline?: boolean;
 }
 
 export const TagInput: React.FC<TagInputProps> = ({
@@ -28,9 +29,10 @@ export const TagInput: React.FC<TagInputProps> = ({
     availableSuggestions = [],
     suggestedTags = [],
     onFetchSuggestions,
+    inline = false,
 }) => {
     const { colors } = useTheme();
-    const styles = getStyles(colors);
+    const styles = getStyles(colors, inline);
 
     const [isInputActive, setIsInputActive] = useState(false);
     const [inputValue, setInputValue] = useState('');
@@ -153,16 +155,17 @@ export const TagInput: React.FC<TagInputProps> = ({
                 )}
             </View>
 
-            {/* Suggestions Dropdown */}
+            {/* Suggestions Dropdown/Inline */}
             {(showSuggestions && hasAnySuggestions) && (
                 <Animated.View style={[
                     styles.suggestions,
                     {
                         height: suggestionHeight,
-                        borderWidth: 1,
+                        borderWidth: inline ? 0 : 1,
+                        marginTop: inline ? 8 : -4,
                     }
                 ]}>
-                    <ScrollView keyboardShouldPersistTaps="always">
+                    <ScrollView keyboardShouldPersistTaps="always" scrollEnabled={!inline}>
                         {filteredAiSuggestions.length > 0 && (
                             <View style={styles.aiSuggestionsContainer}>
                                 <Text style={styles.suggestionLabel}>Suggested</Text>
@@ -206,7 +209,7 @@ export const TagInput: React.FC<TagInputProps> = ({
     );
 };
 
-const getStyles = (colors: ThemeColors) => StyleSheet.create({
+const getStyles = (colors: ThemeColors, inline: boolean) => StyleSheet.create({
     container: {
         width: '100%',
         zIndex: 10,
@@ -275,11 +278,11 @@ const getStyles = (colors: ThemeColors) => StyleSheet.create({
         paddingLeft: 4,
     },
     suggestions: {
-        position: 'absolute',
-        top: '100%',
+        position: inline ? 'relative' : 'absolute',
+        top: inline ? 0 : '100%',
         left: 0,
         right: 0,
-        backgroundColor: colors.surface,
+        backgroundColor: inline ? 'transparent' : colors.surface,
         borderBottomLeftRadius: 12,
         borderBottomRightRadius: 12,
         borderColor: colors.border,
