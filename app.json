@@ -67,8 +67,13 @@
             },
             {
               "type": "text"
+            },
+            {
+              "type": "image",
+              "max": 1
             }
-          ]
+          ],
+          "preprocessingFile": "preprocessing.js"
         }
       ]
     ]

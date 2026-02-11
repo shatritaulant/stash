@@ -36,6 +36,8 @@ export interface SaveFormData {
 
 interface SaveFormProps {
     initialUrl?: string;
+    initialTitle?: string;
+    initialImageUrl?: string;
     initialNote?: string;
     initialCollectionId?: number | null;
     onSave: (data: SaveFormData) => Promise<void>;
@@ -48,6 +50,8 @@ interface SaveFormProps {
 
 export const SaveForm: React.FC<SaveFormProps> = ({
     initialUrl = '',
+    initialTitle = '',
+    initialImageUrl = '',
     initialNote = '',
     initialCollectionId = null,
     onSave,
@@ -65,10 +69,14 @@ export const SaveForm: React.FC<SaveFormProps> = ({
     const [tags, setTags] = useState<string[]>([]);
     const [selectedCollectionId, setSelectedCollectionId] = useState<number | null>(initialCollectionId);
     const [collections, setCollections] = useState(availableCollections);
+    const [previewMeta, setPreviewMeta] = useState<any>(
+        initialTitle || initialImageUrl
+            ? { title: initialTitle, imageUrl: initialImageUrl }
+            : null
+    );
 
     const [loading, setLoading] = useState(false);
     const [analyzing, setAnalyzing] = useState(false);
-    const [previewMeta, setPreviewMeta] = useState<any>(null);
     const [aiSuggestions, setAiSuggestions] = useState<string[]>([]);
     const [fetchingAiSuggestions, setFetchingAiSuggestions] = useState(false);
     const [saveSuccess, setSaveSuccess] = useState(false);
@@ -96,10 +104,21 @@ export const SaveForm: React.FC<SaveFormProps> = ({
 
         if (!isUrl || loading) return;
 
+        // If we already have meta from preprocessing, we might skip full analysis or just use it as fallback
+        if (previewMeta?.title && previewMeta?.imageUrl && isExtension) {
+            setAnalyzing(false);
+            return;
+        }
+
         setAnalyzing(true);
         try {
             const meta = await fetchMetadata(trimmed);
-            setPreviewMeta(meta);
+            // Merge metadata if we already have some from extension
+            setPreviewMeta((prev: any) => ({
+                ...meta,
+                title: prev?.title || meta.title,
+                imageUrl: prev?.imageUrl || meta.imageUrl,
+            }));
             setAiSuggestions([]);
         } catch (e) {
             console.log('Analysis failed', e);

@@ -6,26 +6,44 @@ import { SaveForm, SaveFormData } from './components/SaveForm';
 import { ThemeProvider } from './context/ThemeContext';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
-const ShareExtensionContent: React.FC<InitialProps> = ({ url, text }) => {
+const ShareExtensionContent: React.FC<InitialProps> = ({ url, text, images, preprocessingResults }) => {
     const [loading, setLoading] = useState(true);
     const [syncedCollections, setSyncedCollections] = useState<SyncedCollection[]>([]);
     const [syncedTags, setSyncedTags] = useState<string[]>([]);
     const [sharedUrl, setSharedUrl] = useState<string | undefined>();
+    const [prefilledTitle, setPrefilledTitle] = useState<string | undefined>();
+    const [prefilledImage, setPrefilledImage] = useState<string | undefined>();
     const [tempCollections, setTempCollections] = useState<Record<number, string>>({});
 
     useEffect(() => {
         const init = async () => {
             try {
-                // Determine the URL
-                let extractedUrl = url;
-                if (!extractedUrl && text) {
+                // 1. Handle Preprocessing Results (from Safari)
+                if (preprocessingResults) {
+                    const results = preprocessingResults as any;
+                    if (results.url) setSharedUrl(results.url);
+                    if (results.title || results.ogTitle) setPrefilledTitle(results.title || results.ogTitle);
+                    if (results.ogImage || results.previewImage) setPrefilledImage(results.ogImage || results.previewImage);
+                }
+
+                // 2. Handle Direct Image Sharing
+                if (images && images.length > 0) {
+                    setPrefilledImage(images[0]);
+                }
+
+                // 3. Fallback/Standard URL handling
+                if (!sharedUrl && url) {
+                    setSharedUrl(url);
+                }
+
+                // 4. Text/Regex Fallback
+                if (!sharedUrl && text) {
                     const urlRegex = /(https?:\/\/[^\s]+)/g;
                     const matches = text.match(urlRegex);
                     if (matches && matches[0]) {
-                        extractedUrl = matches[0];
+                        setSharedUrl(matches[0]);
                     }
                 }
-                setSharedUrl(extractedUrl);
 
                 // Load data from shared storage
                 const [cols, tags] = await Promise.all([
@@ -42,7 +60,7 @@ const ShareExtensionContent: React.FC<InitialProps> = ({ url, text }) => {
         };
 
         init();
-    }, [url, text]);
+    }, [url, text, images, preprocessingResults]);
 
     const handleSave = async (data: SaveFormData) => {
         try {
@@ -66,7 +84,7 @@ const ShareExtensionContent: React.FC<InitialProps> = ({ url, text }) => {
             // Dismiss after a short delay for feedback visibility
             setTimeout(() => {
                 close();
-            }, 1500);
+            }, 1000);
         } catch (error) {
             console.error('Save Error:', error);
             Alert.alert('Error', 'Failed to save');
@@ -75,7 +93,6 @@ const ShareExtensionContent: React.FC<InitialProps> = ({ url, text }) => {
     };
 
     const handleCollectionCreated = async (name: string) => {
-        // Generate a temporary ID for new collections created within the extension
         const tempId = -Math.floor(Math.random() * 100000);
         setTempCollections(prev => ({ ...prev, [tempId]: name }));
         return tempId;
@@ -93,6 +110,8 @@ const ShareExtensionContent: React.FC<InitialProps> = ({ url, text }) => {
         <View style={styles.container}>
             <SaveForm
                 initialUrl={sharedUrl}
+                initialTitle={prefilledTitle}
+                initialImageUrl={prefilledImage}
                 availableCollections={syncedCollections.map(c => ({ id: Number(c.id), name: c.name }))}
                 allTags={syncedTags}
                 onSave={handleSave}
