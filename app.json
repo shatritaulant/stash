@@ -30,7 +30,7 @@
       },
       "entitlements": {
         "com.apple.security.application-groups": [
-          "group.com.taulantshatri.keep"
+          "group.com.taulantshatri.keepapp"
         ]
       }
     },
@@ -67,24 +67,29 @@
       [
         "expo-share-extension",
         {
+          "name": "Keep",
           "bundleIdentifier": "com.taulantshatri.keepapp.ShareExtension",
           "main": "index.share.js",
-          "appGroupIdentifier": "group.com.taulantshatri.keep",
+          "appGroupIdentifier": "group.com.taulantshatri.keepapp",
           "activationRules": [
             {
               "type": "url",
-              "max": 1
+              "max": 10
             },
             {
               "type": "text"
             },
             {
               "type": "image",
-              "max": 1
+              "max": 10
             },
             {
               "type": "video",
-              "max": 1
+              "max": 10
+            },
+            {
+              "type": "file",
+              "max": 10
             }
           ],
           "preprocessingFile": "preprocessing.js",

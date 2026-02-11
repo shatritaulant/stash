@@ -1,6 +1,6 @@
 import DefaultPreference from 'react-native-default-preference';
 
-const APP_GROUP_ID = 'group.com.taulantshatri.keep';
+const APP_GROUP_ID = 'group.com.taulantshatri.keepapp';
 const PENDING_SHARE_KEY = 'pending_share';
 const COLLECTIONS_SYNC_KEY = 'synced_collections';
 const TAGS_SYNC_KEY = 'synced_tags';

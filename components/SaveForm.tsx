@@ -246,7 +246,7 @@ export const SaveForm: React.FC<SaveFormProps> = ({
                             <View style={styles.appIconPlaceholder}>
                                 <Ionicons name="bookmark" size={20} color="#fff" />
                             </View>
-                            <Text style={styles.headerTitle}>Stash</Text>
+                            <Text style={styles.headerTitle}>Keep</Text>
                         </View>
                         <TouchableOpacity onPress={onCancel}>
                             <Ionicons name="close" size={24} color={colors.text} />
@@ -402,11 +402,13 @@ const getStyles = (colors: ThemeColors, isExtension: boolean) => StyleSheet.crea
         ...(isExtension ? {
             borderTopLeftRadius: 20,
             borderTopRightRadius: 20,
-        } : {})
+        } : {
+            flex: 1
+        })
     },
     contentContainer: {
         padding: 24,
-        paddingTop: isExtension ? 24 : 40,
+        paddingTop: isExtension ? 16 : 40,
         paddingBottom: 40,
     },
     extensionHeader: {

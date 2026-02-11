@@ -4,7 +4,7 @@ import { LibraryScreen } from '../screens/LibraryScreen';
 import { CollectionsScreen } from '../screens/CollectionsScreen';
 import { Ionicons } from '@expo/vector-icons';
 import { RootTabParamList } from '../types/navigation';
-import { TouchableOpacity } from 'react-native';
+import { TouchableOpacity, Platform as RNPlatform } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { RootStackParamList } from '../types/navigation';
@@ -43,7 +43,12 @@ export const BottomTabNavigator = () => {
                     elevation: 10,
                 },
                 tabBarItemStyle: {
-                    paddingVertical: 4, // Ensures touch target is sufficiently high
+                    justifyContent: 'center',
+                    alignItems: 'center',
+                    paddingVertical: 6,
+                },
+                tabBarIconStyle: {
+                    marginTop: RNPlatform.OS === 'ios' ? 0 : 0,
                 },
                 tabBarActiveTintColor: colors.accent,
                 tabBarInactiveTintColor: colors.textMuted,
@@ -60,7 +65,7 @@ export const BottomTabNavigator = () => {
                         iconName = 'help';
                     }
 
-                    return <Ionicons name={iconName} size={size - 4} color={color} />;
+                    return <Ionicons name={iconName} size={size} color={color} />;
                 },
                 tabBarShowLabel: false,
             })}
