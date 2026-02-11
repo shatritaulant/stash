@@ -6,7 +6,7 @@ import { SaveForm, SaveFormData } from './components/SaveForm';
 import { ThemeProvider } from './context/ThemeContext';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
-const ShareExtensionContent: React.FC<InitialProps> = ({ url, text, images, preprocessingResults }) => {
+const ShareExtensionContent: React.FC<InitialProps> = ({ url, text, images, videos, preprocessingResults }) => {
     const [loading, setLoading] = useState(true);
     const [syncedCollections, setSyncedCollections] = useState<SyncedCollection[]>([]);
     const [syncedTags, setSyncedTags] = useState<string[]>([]);
@@ -60,7 +60,7 @@ const ShareExtensionContent: React.FC<InitialProps> = ({ url, text, images, prep
         };
 
         init();
-    }, [url, text, images, preprocessingResults]);
+    }, [url, text, images, videos, preprocessingResults]);
 
     const handleSave = async (data: SaveFormData) => {
         try {

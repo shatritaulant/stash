@@ -18,6 +18,16 @@
       "userInterfaceStyle": "dark",
       "bundleIdentifier": "com.taulantshatri.keepapp",
       "appleTeamId": "N2ACMGX6D6",
+      "privacyManifests": {
+        "NSPrivacyAccessedAPITypes": [
+          {
+            "NSPrivacyAccessedAPIType": "NSPrivacyAccessedAPICategoryFileTimestamp",
+            "NSPrivacyAccessedAPITypeReasons": [
+              "C617.1"
+            ]
+          }
+        ]
+      },
       "entitlements": {
         "com.apple.security.application-groups": [
           "group.com.taulantshatri.keep"
@@ -57,7 +67,7 @@
       [
         "expo-share-extension",
         {
-          "bundleIdentifier": "com.taulantshatri.keepapp.share",
+          "bundleIdentifier": "com.taulantshatri.keepapp.ShareExtension",
           "main": "index.share.js",
           "appGroupIdentifier": "group.com.taulantshatri.keep",
           "activationRules": [
@@ -71,9 +81,20 @@
             {
               "type": "image",
               "max": 1
+            },
+            {
+              "type": "video",
+              "max": 1
             }
           ],
-          "preprocessingFile": "preprocessing.js"
+          "preprocessingFile": "preprocessing.js",
+          "backgroundColor": {
+            "red": 0,
+            "green": 0,
+            "blue": 0,
+            "alpha": 0.4
+          },
+          "height": 650
         }
       ]
     ]
